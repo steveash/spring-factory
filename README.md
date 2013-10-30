@@ -7,6 +7,80 @@ Don't make everything singletons!
 ...of course, perhaps you should look at [Weld](http://weld.cdi-spec.org/) as it solves this problem elegantly.  But if
 you're stuck in Spring, then please read on!
 
+WiringFactory Usage
+====================
+
+WiringFactory is a little Spring extension which tries to help reduce boilerplate when working with protoype scope 
+beans.  There is a longer discussion below about the why and what, but here's just a quick snippet that shows 
+what its for:
+
+```java
+// we have to build a factory type to take runtime parameters to construct instances
+public class ExportCsvParserFactory extends WiringFactorySupport<ExportCsvParser> {
+
+  public ExportCsvParser makeFor(File csvFile) {
+    // we construct the prototype instance, not spring; the wire method 
+    // provided by WiringFactorySupport allows spring to do @Resource injection, etc.
+    return wire(new ExportCsvParser(csvFile));
+  }
+}
+```
+Then somewhere in a `@Configuration` class:
+```java
+// in the spring @Configuration file you then just register the factory; no need to register 
+// the prototype definition-- spring-factory will do that for us! 
+// (ExportCsvParserFactory class could've also been discovered by component scanning)
+@Bean
+public ExportCsvParserFactory exportCsvParserFactory() {
+  return new ExportCsvParserFactory();
+}
+```
+
+That's it! The spring-factory extension detects all beans that extend `WiringFactory` (which `WiringFactorySupport`
+does) and then automatically creates the prototype definition for the types it creates.  Then inside the factory
+that you make, you construct the bean instance however you want (passing whatever constructor args you need) and then
+just pass that instance to the wire method that `WiringFactorySupport` provides.  The `wire` method takes a `T` and
+returns a `T` - thus, idiomatically, just use it inline in the return statement as above.
+
+Now you can do `@Resource` injects and `@PostConstruct` and whatever else you want:
+
+```java
+@PrototypeComponent
+public class ExportCsvParser implements ICsvParser, AutoCloseable {
+
+  private final File csvFile;
+  private final InputStream is;
+
+  // this gets injected during the call to wire() in the factory just like a
+  // normal singleton bean
+  @Resource private Database db;  
+
+  public ExportCsvParser(File csvFile) {
+    this.csvFile = csvFile;
+    this.is = CharStreams.newInputStream(csvFile, Charsets.UTF8);
+  }
+  
+  @PostConstruct
+  public void afterCreate() {
+    // these work too!
+  }
+
+  // other methods
+
+  @Override
+  public void close() throws Exception {
+    this.is.close();
+  }
+}
+```
+
+Note that `PrototypeComponent` annotation is not required.  It is just there for documentation reasons.  Since
+`@Resource` injection in non-singletons is not as common in our code base its probably best to remind the reader
+that this is a bean and a prototype bean at that.
+
+*Important*: to enable this fancy support you have to `@Import(SpringFactoryBeans.class)` somewhere in your spring
+configuration.
+
 # Why?
 For an object to be useful it generally needs _collaborators_ (usually injected through dependency injection)
 and (optionally) _parameterization_ -- i.e. inputs that will affect the behavior.
@@ -93,64 +167,7 @@ constructor, update the factory to inject it there, etc.
 We want the best of both worlds.  We want a prototype that we can construct – passing whatever runtime parameters we
 need – but that can also be `@Resource` injected (and other spring features like lifecycle callbacks, etc.)
 
-The `WiringFactory`
-====================
-
-I built this little Spring extension called spring-factory which tries to help with this problem.  Here's a
-code example of all you need to handle the above example:
-
-```java
-public class ExportCsvParserFactory extends WiringFactorySupport<ExportCsvParser> {
-
-  public ExportCsvParser makeFor(File csvFile) {
-    return wire(new ExportCsvParser(csvFile));
-  }
-}
-
-// in the spring @Configuration file you then just register the factory -- no need to register the prototype definition
-@Bean
-public ExportCsvParserFactory exportCsvParserFactory() {
-  return new ExportCsvParserFactory();
-}
-```
-
-That's it! The spring-factory extension detects all beans that extend `WiringFactory` (which `WiringFactorySupport`
-does) and then automatically creates the prototype definition for the types it creates.  Then inside the factory
-that you make, you construct the bean instance however you want (passing whatever constructor args you need) and then
-just pass that instance to the wire method that `WiringFactorySupport` provides.  The `wire` method takes a `T` and
-returns a `T` - thus, idiomatically, just use it inline in the return statement as above.
-
-Now you can do `@Resource` injects and `@PostConstruct` and whatever else you want:
-
-```java
-@PrototypeComponent
-public class ExportCsvParser implements ICsvParser, AutoCloseable {
-
-  private final File csvFile;
-  private final InputStream is;
-
-  @Resource private Database db;  // this gets injected during the call to wire() in the factory
-
-  public ExportCsvParser(File csvFile) {
-    this.csvFile = csvFile;
-    this.is = CharStreams.newInputStream(csvFile, Charsets.UTF8);
-  }
-
-  // other methods
-
-  @Override
-  public void close() throws Exception {
-    this.is.close();
-  }
-}
-```
-
-Note that `PrototypeComponent` annotation is not required.  It is just there for documentation reasons.  Since
-`@Resource` injection in non-singletons is not as common in our code base its probably best to remind the reader
-that this is a bean and a prototype bean at that.
-
-*Important*: to enable this fancy support you have to `@Import(SpringFactoryBeans.class)` somewhere in your spring
-configuration.
+See the above WiringFactory sample usage to see how the spring-factory helps this case.
 
 Final note
 ============
