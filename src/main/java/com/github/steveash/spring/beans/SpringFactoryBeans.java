@@ -27,7 +27,7 @@ import com.github.steveash.spring.WiringFactoryBeanFactoryPostProcessor;
 public class SpringFactoryBeans {
 
     @Bean
-    public WiringFactoryBeanFactoryPostProcessor wiringFactoryBeanFactoryPostProcessor() {
+    public static WiringFactoryBeanFactoryPostProcessor wiringFactoryBeanFactoryPostProcessor() {
         return new WiringFactoryBeanFactoryPostProcessor();
     }
 }

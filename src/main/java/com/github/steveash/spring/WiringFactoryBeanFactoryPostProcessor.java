@@ -14,12 +14,13 @@
 
 package com.github.steveash.spring;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import javax.annotation.Nullable;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
-import org.springframework.beans.factory.BeanClassLoaderAware;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
@@ -27,11 +28,9 @@ import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.BeanDefinitionValidationException;
 import org.springframework.beans.factory.support.GenericBeanDefinition;
-import org.springframework.core.type.StandardMethodMetadata;
 import org.springframework.stereotype.Component;
 
 import com.google.common.base.CaseFormat;
-import com.google.common.base.Preconditions;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -40,7 +39,7 @@ import com.google.common.reflect.TypeToken;
  * @author Steve Ash
  */
 @Component
-public class WiringFactoryBeanFactoryPostProcessor implements BeanFactoryPostProcessor, BeanClassLoaderAware {
+public class WiringFactoryBeanFactoryPostProcessor implements BeanFactoryPostProcessor {
     private static final Logger log = LoggerFactory.getLogger(WiringFactoryBeanFactoryPostProcessor.class);
 
     @Nullable
@@ -68,37 +67,16 @@ public class WiringFactoryBeanFactoryPostProcessor implements BeanFactoryPostPro
         return getPrototypeBeanNameFromBeanClass(protoClass);
     }
 
-    private ClassLoader loader;
-
     @Override
     public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
         log.debug("Post processing the bean factory");
-        for (String beanDefName : beanFactory.getBeanDefinitionNames()) {
-
-            BeanDefinition beanDef = beanFactory.getBeanDefinition(beanDefName);
-            Class<?> factoryReturnType = tryReturnFromReflection(beanDef);
-            if (factoryReturnType == null) {
-                factoryReturnType = tryLoadReturnFromBeanDef(beanDef);
-            }
-            if (factoryReturnType == null)
-                continue;
+        String[] wiringFactories = beanFactory.getBeanNamesForType(WiringFactory.class, false, false);
+        for (String beanDefName : wiringFactories) {
+            Class<?> factoryType = checkNotNull(beanFactory.getType(beanDefName), "cant get type for bean");
+            Class<?> factoryReturnType = checkNotNull(getPrototypeClassFromFactory(factoryType), "cant get return");
 
             addPrototypeDef(beanFactory, beanDefName, factoryReturnType);
         }
-    }
-
-    @Nullable
-    private java.lang.Class<?> tryReturnFromReflection(BeanDefinition beanDef) {
-        Object source = beanDef.getSource();
-        if (source instanceof StandardMethodMetadata) {
-            Class<?> returnType = ((StandardMethodMetadata) source).getIntrospectedMethod().getReturnType();
-            if (WiringFactory.class.isAssignableFrom(returnType)) {
-                Class<?> prototypeClass = getPrototypeClassFromFactory(returnType);
-                Preconditions.checkNotNull(prototypeClass, "Spring Factory but can't get prototype class");
-                return prototypeClass;
-            }
-        }
-        return null;
     }
 
     private void addPrototypeDef(ConfigurableListableBeanFactory beanFactory, String beanDefName, Class<?> protoBeanClass) {
@@ -119,23 +97,5 @@ public class WiringFactoryBeanFactoryPostProcessor implements BeanFactoryPostPro
         log.debug("Dynamically adding prototype bean {} from factory {}", beanName, beanDefName);
         BeanDefinitionRegistry registry = (BeanDefinitionRegistry) beanFactory;
         registry.registerBeanDefinition(beanName, protoBean);
-    }
-
-    @Nullable
-    private java.lang.Class<?> tryLoadReturnFromBeanDef(BeanDefinition beanDef) {
-        if (beanDef.getBeanClassName() == null)
-            return null;
-
-        try {
-            Class<?> factoryClass = loader.loadClass(beanDef.getBeanClassName());
-            return getPrototypeClassFromFactory(factoryClass);
-        } catch (ClassNotFoundException e) {
-            return null;
-        }
-    }
-
-    @Override
-    public void setBeanClassLoader(ClassLoader classLoader) {
-        this.loader = classLoader;
     }
 }
