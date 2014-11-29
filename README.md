@@ -1,11 +1,10 @@
 spring-factory
 ==============
+EDIT: **In Spring 4.1 we finally get a reasonable way to do method injection + java @Configuration. Thus, I recommend taking a look at [@Lookup methods](http://docs.spring.io/spring-framework/docs/4.1.0.RELEASE/javadoc-api/org/springframework/beans/factory/annotation/Lookup.html) instead of reading further**
 
-Tiny Spring library to try and ease the pain of using prototype scoped beans inside of singleton scoped services.
-Don't make everything singletons!
+~~Tiny Spring library to try and ease the pain of using prototype scoped beans inside of singleton scoped services.
+Don't make everything singletons!~~
 
-...of course, perhaps you should look at [Weld](http://weld.cdi-spec.org/) as it solves this problem elegantly.  But if
-you're stuck in Spring, then please read on!
 
 WiringFactory Usage
 ====================
